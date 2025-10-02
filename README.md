@@ -18,7 +18,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
->>>>>>> d7c2818 (Initial commit project Flutter)
+>>>>>>> d7c2818 (update READMEmain project Flutter)
 
 # Proyecto Flutter — Smart Fitting Room & AR Commerce
 
