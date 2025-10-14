@@ -22,7 +22,7 @@ class MyApp extends StatelessWidget {
       title: 'Smart Fitting Room',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Roboto'),
-      home: const LoginPage(), // 👈 Página principal (Login)
+      home: const LoginPage(), // Página principal (Login)
     );
   }
 }
