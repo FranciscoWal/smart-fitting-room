@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
-        width: 80,
+        width: 75,
         height: 70,
         decoration: BoxDecoration(
           color: isSelected ? Colors.blue[100] : Colors.transparent,
@@ -90,15 +90,14 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: Colors.white,
         elevation: 3,
         title: Row(
-          children: [
-            // Icono del logotipo (izquierda)
-            const Icon(
-              Icons.checkroom, // icono tipo camisa/ropa
+          children: const [
+            Icon(
+              Icons.checkroom, // ícono tipo camisa
               color: Colors.blueAccent,
               size: 30,
             ),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: 8),
+            Text(
               'Smart Fitting Room',
               style: TextStyle(
                 color: Colors.black87,
@@ -108,11 +107,11 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
         actions: [
-          // Avatar del usuario (ahora va antes del logout)
+          // 🔹 Icono de perfil (izquierda del botón de logout)
           GestureDetector(
             onTap: () {
               setState(() {
-                _selectedIndex = 4; // Ir a la página de Perfil
+                _selectedIndex = 4; // Ir a perfil
               });
             },
             child: const Padding(
@@ -124,7 +123,8 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-          // 🔒 Botón de cerrar sesión
+
+          // 🔹 Botón de cerrar sesión
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.grey),
             tooltip: 'Cerrar sesión',
@@ -133,7 +133,9 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(width: 8),
         ],
       ),
+
       body: _pages[_selectedIndex],
+
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -161,16 +163,122 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _InicioContent extends StatelessWidget {
+class _InicioContent extends StatefulWidget {
   const _InicioContent();
 
   @override
+  State<_InicioContent> createState() => _InicioContentState();
+}
+
+class _InicioContentState extends State<_InicioContent> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  final List<String> _carouselImages = [
+    'assets/images/carrusel_1.jpeg',
+    'assets/images/carrusel_2.jpeg',
+    'assets/images/carrusel_3.jpeg',
+    'assets/images/carrusel_4.jpeg',
+    'assets/images/carrusel_5.jpeg',
+  ];
+
+  @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text(
-        '¡Bienvenido a Smart Fitting Room!',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-      ),
+    final size = MediaQuery.of(context).size;
+
+    return Column(
+      children: [
+        const SizedBox(height: 15),
+
+        // 🔹 Texto superior de bienvenida
+        const Text(
+          'Bienvenido usuario',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // 🔹 Imagen principal
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            width: double.infinity,
+            height: size.height * 0.38,
+            child: Image.asset(
+              'assets/images/prenda_principal.jpeg',
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // 🔹 Texto llamativo debajo de la imagen principal
+        const Text(
+          '¡¡LA MÁS POPULAR!!',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.blueAccent,
+          ),
+        ),
+
+        const SizedBox(height: 25),
+
+        // 🔹 Carrusel simple de imágenes (sin sombra ni borde redondeado)
+        SizedBox(
+          height: size.height * 0.3,
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              PageView.builder(
+                controller: _pageController,
+                itemCount: _carouselImages.length,
+                onPageChanged: (index) {
+                  setState(() => _currentPage = index);
+                },
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Image.asset(
+                      _carouselImages[index],
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                    ),
+                  );
+                },
+              ),
+
+              // 🔹 Indicadores inferiores
+              Positioned(
+                bottom: 8,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    _carouselImages.length,
+                    (index) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: _currentPage == index ? 12 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _currentPage == index
+                            ? Colors.blueAccent
+                            : Colors.grey[300],
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
