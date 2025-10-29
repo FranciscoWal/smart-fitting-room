@@ -68,3 +68,6 @@ lib/
 - Pruebas unitarias de reglas de negocio puras (sin dependencias).
 - Validación de entrada/salida y transformación de datos.
 - Casos extremos o edge cases (outfits no disponibles, error de cámara, etc.).
+
+
+--Prueva de versionamiento de rules 

@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_fitting_room/config/supabase_config.dart';
 import 'package:smart_fitting_room/presentation/pages/homepage.dart';
 import 'package:smart_fitting_room/presentation/pages/mfa_verification.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 // -----------------------------------------------------------------------------
 // Página principal de Login / Registro
@@ -38,6 +40,25 @@ class _LoginPageState extends State<LoginPage> {
       context,
       MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()),
     );
+  }
+
+  // 🔹 Prueba de conexión HTTP (debe fallar si tu config está bien)
+  Future<void> _testHttpCleartext() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Probando HTTP sin cifrar...')),
+    );
+    try {
+      final resp = await http.get(Uri.parse('http://example.com')); // <- SIN https
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('⚠️ HTTP inesperadamente permitido: ${resp.statusCode}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('✅ Bloqueado como se esperaba: $e')),
+      );
+    }
   }
 
   Future<void> _authenticate() async {
@@ -97,6 +118,13 @@ class _LoginPageState extends State<LoginPage> {
               MaterialPageRoute(builder: (_) => const HomePage()),
             );
           }
+        if (!mounted) return;
+
+        if (response.user != null) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
         } else {
           setState(() {
             _errorMessage = 'Usuario o contraseña incorrectos';
@@ -109,6 +137,8 @@ class _LoginPageState extends State<LoginPage> {
           password: password,
           data: {'mfa_enabled': _enableMFA},
         );
+
+        if (!mounted) return;
 
         if (response.user != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -124,10 +154,13 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
     } on AuthException catch (e) {
+      if (!mounted) return;
       setState(() => _errorMessage = e.message);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _errorMessage = 'Error: $e');
     } finally {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
@@ -168,9 +201,16 @@ class _LoginPageState extends State<LoginPage> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withValues(alpha: 0.4),
                       border: Border.all(color: Colors.white, width: 2),
                       borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(3, 3),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
@@ -308,6 +348,26 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ),
+                        // 🔹 Botón de prueba HTTP (SOLO en debug)
+                        if (kDebugMode) ...[
+                          const SizedBox(height: 10),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,   // Fondo blanco
+                              foregroundColor: Colors.black,   // Texto negro
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 40),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                                side: const BorderSide(color: Colors.black, width: 1.5),
+                              ),
+                            ),
+                            onPressed: _testHttpCleartext,
+                            child: const Text(
+                              'Probar HTTP (debe fallar)',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -361,6 +421,7 @@ class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/aviso_privacidad.pdf');
     await file.writeAsBytes(bytes.buffer.asUint8List());
+    if (!mounted) return;
     setState(() => localPath = file.path);
   }
 
