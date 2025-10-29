@@ -48,10 +48,16 @@ class _LoginPageState extends State<LoginPage> {
       const SnackBar(content: Text('Probando HTTP sin cifrar...')),
     );
     try {
-      final resp = await http.get(Uri.parse('http://example.com')); // <- SIN https
+      final resp = await http.get(
+        Uri.parse('http://example.com'),
+      ); // <- SIN https
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('⚠️ HTTP inesperadamente permitido: ${resp.statusCode}')),
+        SnackBar(
+          content: Text(
+            '⚠️ HTTP inesperadamente permitido: ${resp.statusCode}',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -118,17 +124,18 @@ class _LoginPageState extends State<LoginPage> {
               MaterialPageRoute(builder: (_) => const HomePage()),
             );
           }
-        if (!mounted) return;
+          if (!mounted) return;
 
-        if (response.user != null) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomePage()),
-          );
-        } else {
-          setState(() {
-            _errorMessage = 'Usuario o contraseña incorrectos';
-          });
+          if (response.user != null) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const HomePage()),
+            );
+          } else {
+            setState(() {
+              _errorMessage = 'Usuario o contraseña incorrectos';
+            });
+          }
         }
       } else {
         // Registro con opción de MFA
@@ -353,12 +360,18 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 10),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,   // Fondo blanco
-                              foregroundColor: Colors.black,   // Texto negro
-                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 40),
+                              backgroundColor: Colors.white, // Fondo blanco
+                              foregroundColor: Colors.black, // Texto negro
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 40,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(25),
-                                side: const BorderSide(color: Colors.black, width: 1.5),
+                                side: const BorderSide(
+                                  color: Colors.black,
+                                  width: 1.5,
+                                ),
                               ),
                             ),
                             onPressed: _testHttpCleartext,
