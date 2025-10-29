@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_fitting_room/config/supabase_config.dart';
 import 'package:smart_fitting_room/presentation/pages/homepage.dart';
+import 'package:smart_fitting_room/presentation/pages/mfa_verification.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kDebugMode;
 
@@ -26,6 +27,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   String? _errorMessage;
   bool _acceptPrivacy = false;
+  bool _enableMFA = false;
 
   bool isValidEmail(String email) {
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
@@ -99,6 +101,23 @@ class _LoginPageState extends State<LoginPage> {
           password: password,
         );
 
+        final user = response.user;
+        if (user != null) {
+          // 🔐 Verificar si MFA está habilitado
+          final mfaEnabled = user.userMetadata?['mfa_enabled'] == true;
+          if (mfaEnabled) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MFAVerificationPage(email: email),
+              ),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const HomePage()),
+            );
+          }
         if (!mounted) return;
 
         if (response.user != null) {
@@ -112,17 +131,23 @@ class _LoginPageState extends State<LoginPage> {
           });
         }
       } else {
+        // Registro con opción de MFA
         final response = await SupabaseConfig.client.auth.signUp(
           email: email,
           password: password,
+          data: {'mfa_enabled': _enableMFA},
         );
 
         if (!mounted) return;
 
         if (response.user != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Cuenta creada con éxito. Revisa tu correo.'),
+            SnackBar(
+              content: Text(
+                _enableMFA
+                    ? 'Cuenta creada con MFA activado. Revisa tu correo.'
+                    : 'Cuenta creada con éxito. Revisa tu correo.',
+              ),
             ),
           );
           setState(() => _isLogin = true);
@@ -148,13 +173,7 @@ class _LoginPageState extends State<LoginPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 🔹 Imagen de fondo
-          Image.asset(
-            'assets/images/fondo_login.jpeg',
-            fit: BoxFit.cover,
-          ),
-
-          // 🔹 Contenido principal
+          Image.asset('assets/images/fondo_login.jpeg', fit: BoxFit.cover),
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
@@ -167,7 +186,6 @@ class _LoginPageState extends State<LoginPage> {
                       color: Colors.white,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
                       shadows: [
                         Shadow(
                           blurRadius: 6,
@@ -179,7 +197,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 40),
 
-                  // 🔹 Caja transparente con texto blanco
+                  // Caja principal
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -206,52 +224,30 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 30),
 
-                        // 🔹 Campo correo
+                        // Correo
                         TextField(
                           controller: _emailController,
-                          decoration: InputDecoration(
-                            labelText: 'Correo electrónico',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Colors.white),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                  color: Colors.white, width: 2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon:
-                                const Icon(Icons.email, color: Colors.white),
+                          decoration: _inputDecoration(
+                            'Correo electrónico',
+                            Icons.email,
                           ),
                           style: const TextStyle(color: Colors.white),
                         ),
                         const SizedBox(height: 15),
 
-                        // 🔹 Campo contraseña
+                        // Contraseña
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: 'Contraseña',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Colors.white),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                  color: Colors.white, width: 2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon:
-                                const Icon(Icons.lock, color: Colors.white),
+                          decoration: _inputDecoration(
+                            'Contraseña',
+                            Icons.lock,
                           ),
                           style: const TextStyle(color: Colors.white),
                         ),
                         const SizedBox(height: 20),
 
-                        // ✅ Checkbox solo visible en "Crear cuenta"
+                        // Aviso de privacidad
                         if (isRegister)
                           Row(
                             children: [
@@ -277,16 +273,39 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ],
                           ),
-                        const SizedBox(height: 20),
 
+                        // Activar MFA
+                        if (isRegister)
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _enableMFA,
+                                onChanged: (value) {
+                                  setState(() => _enableMFA = value!);
+                                },
+                                activeColor: Colors.white,
+                                checkColor: Colors.black,
+                              ),
+                              const Expanded(
+                                child: Text(
+                                  'Activar verificación en dos pasos (MFA)',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                        const SizedBox(height: 20),
                         if (_errorMessage != null)
                           Text(
                             _errorMessage!,
                             style: const TextStyle(
-                                color: Colors.redAccent, fontSize: 14),
+                              color: Colors.redAccent,
+                              fontSize: 14,
+                            ),
                           ),
-                        const SizedBox(height: 15),
 
+                        const SizedBox(height: 15),
                         ElevatedButton(
                           onPressed: _loading ? null : _authenticate,
                           style: ElevatedButton.styleFrom(
@@ -304,13 +323,13 @@ class _LoginPageState extends State<LoginPage> {
                             _loading
                                 ? 'Cargando...'
                                 : isRegister
-                                    ? 'Registrarse'
-                                    : 'Iniciar sesión',
+                                ? 'Registrarse'
+                                : 'Iniciar sesión',
                             style: const TextStyle(fontSize: 16),
                           ),
                         ),
-                        const SizedBox(height: 15),
 
+                        const SizedBox(height: 15),
                         TextButton(
                           onPressed: () {
                             setState(() {
@@ -326,7 +345,6 @@ class _LoginPageState extends State<LoginPage> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
-                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
@@ -359,6 +377,22 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white),
+      enabledBorder: OutlineInputBorder(
+        borderSide: const BorderSide(color: Colors.white),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderSide: const BorderSide(color: Colors.white, width: 2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      prefixIcon: Icon(icon, color: Colors.white),
     );
   }
 }
@@ -399,11 +433,7 @@ class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
         backgroundColor: Colors.black,
         title: const Text(
           "Aviso de Privacidad",
-          style: TextStyle(
-            color: Colors.white,
-            decoration: TextDecoration.none,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
@@ -411,15 +441,8 @@ class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
         ),
       ),
       body: localPath == null
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : PDFView(
-              filePath: localPath!,
-              enableSwipe: true,
-              autoSpacing: true,
-              swipeHorizontal: false,
-            ),
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : PDFView(filePath: localPath!),
     );
   }
 }
