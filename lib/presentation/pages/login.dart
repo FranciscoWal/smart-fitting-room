@@ -6,10 +6,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_fitting_room/config/supabase_config.dart';
 import 'package:smart_fitting_room/presentation/pages/homepage.dart';
+import 'package:smart_fitting_room/presentation/pages/mfa_verification.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kDebugMode;
 
-// -----------------------------------------------------------------------------
-// Página principal de Login / Registro
-// -----------------------------------------------------------------------------
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -20,22 +20,57 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
   bool _isLogin = true;
   bool _loading = false;
   String? _errorMessage;
   bool _acceptPrivacy = false;
+  bool _enableMFA = false;
 
   bool isValidEmail(String email) {
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    final emailRegex =
+        RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     return emailRegex.hasMatch(email);
   }
 
-  // 🔹 Abre la página del PDF dentro de la app
+  // 🔹 Abre el PDF del aviso de privacidad
   Future<void> _openPrivacyPDF() async {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const PrivacyPolicyPage()),
     );
+  }
+
+  // ✅ PRUEBA DE SEGURIDAD DE RED
+  // Esta prueba intenta conectar a http://neverssl.com (sitio sin TLS)
+  // ✔️ Si tu política de seguridad funciona → la conexión será bloqueada
+  // ❌ Si devuelve 200 → aún permite tráfico HTTP sin cifrar
+  Future<void> _testHttpCleartext() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Probando HTTP sin cifrar...')),
+    );
+    try {
+      final resp = await http.get(
+        Uri.parse('http://neverssl.com'),
+      );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '⚠️ HTTP inesperadamente permitido: ${resp.statusCode}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('✅ Bloqueado como se esperaba: $e'),
+        ),
+      );
+    }
   }
 
   Future<void> _authenticate() async {
@@ -50,64 +85,85 @@ class _LoginPageState extends State<LoginPage> {
     if (!isValidEmail(email)) {
       setState(() {
         _errorMessage = 'Correo electrónico inválido';
-        _loading = false;
       });
+      _loading = false;
       return;
     }
 
     if (password.length < 6) {
       setState(() {
-        _errorMessage = 'La contraseña debe tener al menos 6 caracteres';
-        _loading = false;
+        _errorMessage =
+            'La contraseña debe tener al menos 6 caracteres';
       });
+      _loading = false;
       return;
     }
 
     if (!_isLogin && !_acceptPrivacy) {
       setState(() {
-        _errorMessage = 'Debes aceptar el aviso de privacidad para continuar';
-        _loading = false;
+        _errorMessage =
+            'Debes aceptar el aviso de privacidad';
       });
+      _loading = false;
       return;
     }
 
     try {
       if (_isLogin) {
-        final response = await SupabaseConfig.client.auth.signInWithPassword(
+        final response = await SupabaseConfig.client.auth
+            .signInWithPassword(
           email: email,
           password: password,
         );
 
-        if (response.user != null) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomePage()),
-          );
-        } else {
-          setState(() {
-            _errorMessage = 'Usuario o contraseña incorrectos';
-          });
+        final user = response.user;
+
+        if (user != null) {
+          final mfaEnabled =
+              user.userMetadata?['mfa_enabled'] == true;
+
+          if (mfaEnabled) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    MFAVerificationPage(email: email),
+              ),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const HomePage()),
+            );
+          }
         }
       } else {
-        final response = await SupabaseConfig.client.auth.signUp(
+        await SupabaseConfig.client.auth.signUp(
           email: email,
           password: password,
+          data: {'mfa_enabled': _enableMFA},
         );
 
-        if (response.user != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Cuenta creada con éxito. Revisa tu correo.'),
-            ),
-          );
-          setState(() => _isLogin = true);
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_enableMFA
+                ? 'Cuenta creada con MFA. Revisa tu correo'
+                : 'Cuenta creada con éxito'),
+          ),
+        );
+
+        setState(() => _isLogin = true);
       }
     } on AuthException catch (e) {
+      if (!mounted) return;
       setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage = 'Error: $e');
+      if (!mounted) return;
+      setState(() =>
+          _errorMessage = 'Error inesperado: $e');
     } finally {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
@@ -120,18 +176,15 @@ class _LoginPageState extends State<LoginPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 🔹 Imagen de fondo
+          // Imagen de fondo
           Image.asset(
             'assets/images/fondo_login.jpeg',
             fit: BoxFit.cover,
           ),
-
-          // 🔹 Contenido principal
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Text(
                     'Smart Fitting Room',
@@ -139,7 +192,6 @@ class _LoginPageState extends State<LoginPage> {
                       color: Colors.white,
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
                       shadows: [
                         Shadow(
                           blurRadius: 6,
@@ -151,89 +203,58 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 40),
 
-                  // 🔹 Caja transparente con texto blanco
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      border: Border.all(color: Colors.white, width: 2),
+                      color:
+                          Colors.black.withValues(alpha: 0.4),
+                      border: Border.all(color: Colors.white),
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 6,
-                          offset: const Offset(3, 3),
-                        ),
-                      ],
                     ),
                     child: Column(
                       children: [
                         Text(
-                          isRegister ? 'Crear cuenta' : 'Iniciar sesión',
+                          isRegister
+                              ? 'Crear cuenta'
+                              : 'Iniciar sesión',
                           style: const TextStyle(
                             fontSize: 22,
-                            fontWeight: FontWeight.bold,
                             color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 30),
 
-                        // 🔹 Campo correo
                         TextField(
                           controller: _emailController,
-                          decoration: InputDecoration(
-                            labelText: 'Correo electrónico',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Colors.white),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                  color: Colors.white, width: 2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon:
-                                const Icon(Icons.email, color: Colors.white),
-                          ),
-                          style: const TextStyle(color: Colors.white),
+                          decoration:
+                              _inputDecoration('Correo electrónico',
+                                  Icons.email),
+                          style: const TextStyle(
+                              color: Colors.white),
                         ),
                         const SizedBox(height: 15),
 
-                        // 🔹 Campo contraseña
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: 'Contraseña',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(color: Colors.white),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                  color: Colors.white, width: 2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon:
-                                const Icon(Icons.lock, color: Colors.white),
-                          ),
-                          style: const TextStyle(color: Colors.white),
+                          decoration: _inputDecoration(
+                              'Contraseña', Icons.lock),
+                          style: const TextStyle(
+                              color: Colors.white),
                         ),
                         const SizedBox(height: 20),
 
-                        // ✅ Checkbox solo visible en "Crear cuenta"
                         if (isRegister)
                           Row(
                             children: [
                               Checkbox(
                                 value: _acceptPrivacy,
-                                onChanged: (value) {
-                                  setState(() => _acceptPrivacy = value!);
+                                onChanged: (v) {
+                                  setState(() =>
+                                      _acceptPrivacy =
+                                          v ?? false);
                                 },
-                                activeColor: Colors.white,
-                                checkColor: Colors.black,
                               ),
                               Expanded(
                                 child: GestureDetector(
@@ -241,36 +262,47 @@ class _LoginPageState extends State<LoginPage> {
                                   child: const Text(
                                     'He leído y acepto el aviso de privacidad',
                                     style: TextStyle(
-                                      color: Colors.white,
-                                      decoration: TextDecoration.none,
-                                    ),
+                                        color: Colors.white),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                        const SizedBox(height: 20),
 
-                        if (_errorMessage != null)
-                          Text(
-                            _errorMessage!,
-                            style: const TextStyle(
-                                color: Colors.redAccent, fontSize: 14),
+                        if (isRegister)
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _enableMFA,
+                                onChanged: (v) {
+                                  setState(() =>
+                                      _enableMFA =
+                                          v ?? false);
+                                },
+                              ),
+                              const Expanded(
+                                child: Text(
+                                  'Activar MFA (2FA)',
+                                  style: TextStyle(
+                                      color: Colors.white),
+                                ),
+                              ),
+                            ],
                           ),
+
+                        const SizedBox(height: 15),
+                        if (_errorMessage != null)
+                          Text(_errorMessage!,
+                              style: const TextStyle(
+                                  color: Colors.redAccent)),
                         const SizedBox(height: 15),
 
                         ElevatedButton(
-                          onPressed: _loading ? null : _authenticate,
+                          onPressed:
+                              _loading ? null : _authenticate,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                              horizontal: 70,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
                           ),
                           child: Text(
                             _loading
@@ -278,30 +310,37 @@ class _LoginPageState extends State<LoginPage> {
                                 : isRegister
                                     ? 'Registrarse'
                                     : 'Iniciar sesión',
-                            style: const TextStyle(fontSize: 16),
                           ),
                         ),
-                        const SizedBox(height: 15),
+                        const SizedBox(height: 20),
 
                         TextButton(
                           onPressed: () {
                             setState(() {
                               _isLogin = !_isLogin;
-                              _errorMessage = null;
-                              _acceptPrivacy = false;
                             });
                           },
                           child: Text(
                             isRegister
                                 ? '¿Ya tienes cuenta? Inicia sesión'
-                                : '¿No tienes cuenta? Crear una',
+                                : 'Crear una nueva cuenta',
                             style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
+                                color: Colors.white),
                           ),
                         ),
+                        const SizedBox(height: 15),
+
+                        // ✅ Botón de prueba del cifrado en tránsito
+                        if (kDebugMode)
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                            ),
+                            onPressed: _testHttpCleartext,
+                            child: const Text(
+                                'Probar HTTP (neverssl.com) – debe fallar'),
+                          ),
                       ],
                     ),
                   ),
@@ -313,19 +352,38 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+
+  // Reutilización de estilos para inputs
+  InputDecoration _inputDecoration(
+      String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white),
+      prefixIcon: Icon(icon, color: Colors.white),
+      enabledBorder: OutlineInputBorder(
+        borderSide: const BorderSide(color: Colors.white),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderSide:
+            BorderSide(color: Colors.white, width: 2),
+      ),
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
-// Página del PDF del Aviso de Privacidad
+// 🔐 Página del PDF del Aviso de Privacidad
 // -----------------------------------------------------------------------------
 class PrivacyPolicyPage extends StatefulWidget {
   const PrivacyPolicyPage({super.key});
 
   @override
-  State<PrivacyPolicyPage> createState() => _PrivacyPolicyPageState();
+  State<PrivacyPolicyPage> createState() =>
+      _PrivacyPolicyPageState();
 }
 
-class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
+class _PrivacyPolicyPageState
+    extends State<PrivacyPolicyPage> {
   String? localPath;
 
   @override
@@ -335,10 +393,15 @@ class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
   }
 
   Future<void> loadPDF() async {
-    final bytes = await rootBundle.load('assets/docs/aviso_privacidad.pdf');
+    final bytes = await rootBundle
+        .load('assets/docs/aviso_privacidad.pdf');
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/aviso_privacidad.pdf');
-    await file.writeAsBytes(bytes.buffer.asUint8List());
+    final file = File(
+        '${dir.path}/aviso_privacidad.pdf');
+    await file
+        .writeAsBytes(bytes.buffer.asUint8List());
+
+    if (!mounted) return;
     setState(() => localPath = file.path);
   }
 
@@ -349,28 +412,15 @@ class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: const Text(
-          "Aviso de Privacidad",
-          style: TextStyle(
-            color: Colors.white,
-            decoration: TextDecoration.none,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          'Aviso de Privacidad',
+          style: TextStyle(color: Colors.white),
         ),
       ),
       body: localPath == null
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : PDFView(
-              filePath: localPath!,
-              enableSwipe: true,
-              autoSpacing: true,
-              swipeHorizontal: false,
-            ),
+              child: CircularProgressIndicator(
+                  color: Colors.white))
+          : PDFView(filePath: localPath!),
     );
   }
 }
