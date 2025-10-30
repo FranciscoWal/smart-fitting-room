@@ -1,12 +1,18 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseConfig {
-  static const String supabaseUrl = 'https://rdgdpyncadiibidqlxbv.supabase.co';
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkZ2RweW5jYWRpaWJpZHFseGJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzODAwNjcsImV4cCI6MjA3NTk1NjA2N30.cEahPvODZGiN2a_NpRd4vfqRhQpaui1ttKxe_sXVT1I';
-
   static Future<void> initialize() async {
-    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+    await dotenv.load(); // Carga el archivo .env
+
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL']!,
+      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    );
+
+    // Verificación
+    // print("URL: ${dotenv.env['SUPABASE_URL']}");
+    // print("KEY: ${dotenv.env['SUPABASE_ANON_KEY']}");
   }
 
   static SupabaseClient get client => Supabase.instance.client;
