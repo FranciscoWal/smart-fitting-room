@@ -37,6 +37,27 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  
+  # Supabase: conexión con base de datos y autenticación.
+  supabase_flutter: ^2.10.3
+
+  # Cámara: permite capturar video e imágenes en tiempo real desde la cámara del dispositivo.
+  camera: ^0.10.5+5
+
+  # Stacked: facilita la gestión de vistas y capas superpuestas (útil para mostrar prendas sobre la imagen).
+  stacked: ^3.4.1
+
+  # Permission Handler: se usa para solicitar permisos de cámara al usuario.
+  permission_handler: ^11.3.1
+
+  google_mlkit_pose_detection: ^0.12.1
+  
+  google_mlkit_commons: ^0.8.1
+
+  url_launcher: ^6.3.0
+  flutter_pdfview: ^1.4.3
+  path_provider: ^2.1.5
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
@@ -64,8 +85,8 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - .env
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+    - assets/images/
+    - assets/docs/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
