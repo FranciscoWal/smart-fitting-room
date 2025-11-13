@@ -1,11 +1,11 @@
-import 'dart:typed_data';
+import 'dart:io'; // Para Platform.isAndroid / isIOS
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter/services.dart'; // para rootBundle.load()
+import 'package:flutter/services.dart'; // rootBundle.load()
 
 class ProbarPage extends StatefulWidget {
   const ProbarPage({super.key});
@@ -32,6 +32,14 @@ class _ProbarPageState extends State<ProbarPage> {
   int _currentRopaIndex = 0;
   ui.Image? _ropaImage;
 
+  // Tabla de orientación recomendada por google_mlkit_commons
+  final Map<DeviceOrientation, int> _orientations = const {
+    DeviceOrientation.portraitUp: 0,
+    DeviceOrientation.landscapeLeft: 90,
+    DeviceOrientation.portraitDown: 180,
+    DeviceOrientation.landscapeRight: 270,
+  };
+
   @override
   void initState() {
     super.initState();
@@ -43,10 +51,16 @@ class _ProbarPageState extends State<ProbarPage> {
   }
 
   Future<void> _loadRopaImage(String path) async {
-    final data = await rootBundle.load(path);
-    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-    final frame = await codec.getNextFrame();
-    setState(() => _ropaImage = frame.image);
+    try {
+      final data = await rootBundle.load(path);
+      final codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(),
+      );
+      final frame = await codec.getNextFrame();
+      setState(() => _ropaImage = frame.image);
+    } catch (e) {
+      debugPrint('Error cargando prenda: $e');
+    }
   }
 
   @override
@@ -59,11 +73,18 @@ class _ProbarPageState extends State<ProbarPage> {
 
   Future<void> _initializeCamera() async {
     final status = await Permission.camera.request();
-    if (!status.isGranted) return;
+    if (!status.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permiso de cámara denegado')),
+        );
+      }
+      return;
+    }
 
     final cameras = await availableCameras();
 
-    // 👉 Usamos la cámara TRASERA (y luego reflejamos la imagen)
+    // Usamos la cámara TRASERA
     final backCamera = cameras.firstWhere(
       (camera) => camera.lensDirection == CameraLensDirection.back,
       orElse: () => cameras.first,
@@ -74,7 +95,10 @@ class _ProbarPageState extends State<ProbarPage> {
       backCamera,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420,
+      // Formato correcto para ML Kit:
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
 
     await _cameraController!.initialize();
@@ -86,21 +110,23 @@ class _ProbarPageState extends State<ProbarPage> {
   void _processCameraImage(CameraImage image) async {
     if (_isProcessing) return;
 
-    // 👇 Procesar máximo 2 veces por segundo
-    if (DateTime.now().difference(_lastProcessTime).inMilliseconds < 500) return;
+    // Procesar máximo 2 veces por segundo
+    if (DateTime.now().difference(_lastProcessTime).inMilliseconds < 500) {
+      return;
+    }
     _lastProcessTime = DateTime.now();
-
     _isProcessing = true;
 
     try {
       _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-      final inputImage = _convertCameraImage(image);
+      final inputImage = _inputImageFromCameraImage(image);
       if (inputImage == null) {
         _isProcessing = false;
         return;
       }
 
       final poses = await _poseDetector!.processImage(inputImage);
+
       if (mounted) {
         setState(() {
           _poses = poses;
@@ -113,35 +139,59 @@ class _ProbarPageState extends State<ProbarPage> {
     }
   }
 
-  InputImage? _convertCameraImage(CameraImage image) {
-    try {
-      final bytesBuilder = BytesBuilder();
-      for (final plane in image.planes) {
-        bytesBuilder.add(plane.bytes);
+  // Versión oficial adaptada de google_mlkit_commons
+  InputImage? _inputImageFromCameraImage(CameraImage image) {
+    if (_cameraController == null) return null;
+
+    final camera = _cameraController!.description;
+    final sensorOrientation = camera.sensorOrientation;
+    InputImageRotation? rotation;
+
+    if (Platform.isIOS) {
+      rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+    } else if (Platform.isAndroid) {
+      var rotationCompensation =
+          _orientations[_cameraController!.value.deviceOrientation];
+      if (rotationCompensation == null) return null;
+
+      if (camera.lensDirection == CameraLensDirection.front) {
+        // cámara frontal
+        rotationCompensation =
+            (sensorOrientation + rotationCompensation) % 360;
+      } else {
+        // cámara trasera
+        rotationCompensation =
+            (sensorOrientation - rotationCompensation + 360) % 360;
       }
-      final bytes = bytesBuilder.toBytes();
+      rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
+    }
 
-      int rotationDegrees = _cameraController?.description.sensorOrientation ?? 0;
-      InputImageRotation rotation = InputImageRotation.rotation0deg;
-      if (rotationDegrees == 90) {
-        rotation = InputImageRotation.rotation90deg;
-      } else if (rotationDegrees == 180) {
-        rotation = InputImageRotation.rotation180deg;
-      } else if (rotationDegrees == 270) {
-        rotation = InputImageRotation.rotation270deg;
-      }
+    if (rotation == null) return null;
 
-      final metadata = InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: InputImageFormat.yuv420,
-        bytesPerRow: image.planes.isNotEmpty ? image.planes[0].bytesPerRow : 0,
-      );
+    final format = InputImageFormatValue.fromRawValue(image.format.raw);
 
-      return InputImage.fromBytes(bytes: bytes, metadata: metadata);
-    } catch (_) {
+    if (format == null ||
+        (Platform.isAndroid && format != InputImageFormat.nv21) ||
+        (Platform.isIOS && format != InputImageFormat.bgra8888)) {
       return null;
     }
+
+    if (image.planes.length != 1) return null;
+
+    final plane = image.planes.first;
+
+    return InputImage.fromBytes(
+      bytes: plane.bytes,
+      metadata: InputImageMetadata(
+        size: Size(
+          image.width.toDouble(),
+          image.height.toDouble(),
+        ),
+        rotation: rotation,
+        format: format,
+        bytesPerRow: plane.bytesPerRow,
+      ),
+    );
   }
 
   void _changeRopa() async {
@@ -162,31 +212,45 @@ class _ProbarPageState extends State<ProbarPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
     return Scaffold(
       body: _isCameraInitialized
           ? Stack(
               fit: StackFit.expand,
               children: [
-                // 📸 Cámara reflejada como espejo
-                Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.rotationY(3.1416),
-                  child: CameraPreview(_cameraController!),
-                ),
-                // 👕 Dibuja la prenda sobre el cuerpo
-                if (_poses != null && _imageSize != null && _ropaImage != null)
-                  ..._poses!.map((pose) {
-                    return CustomPaint(
-                      painter: RopaPainter(
-                        pose: pose,
-                        imageSize: _imageSize!,
-                        widgetSize: MediaQuery.of(context).size,
-                        mirror: true,
-                        ropaImage: _ropaImage!,
-                      ),
-                    );
-                  }).toList(),
-                // 🔘 Botón inferior
+                // 📸 Cámara SIN efecto espejo
+                CameraPreview(_cameraController!),
+
+                // 🧍‍♂️ Esqueleto (puntos + líneas)
+                if (_poses != null && _imageSize != null)
+                  CustomPaint(
+                    size: screenSize,
+                    painter: PoseSkeletonPainter(
+                      poses: _poses!,
+                      imageSize: _imageSize!,
+                      widgetSize: screenSize,
+                      mirror: false, // 👈 sin espejo
+                    ),
+                  ),
+
+                // 👕 Prenda sobre el cuerpo (solo primera pose)
+                if (_poses != null &&
+                    _poses!.isNotEmpty &&
+                    _imageSize != null &&
+                    _ropaImage != null)
+                  CustomPaint(
+                    size: screenSize,
+                    painter: RopaPainter(
+                      pose: _poses!.first,
+                      imageSize: _imageSize!,
+                      widgetSize: screenSize,
+                      mirror: false, // 👈 sin espejo
+                      ropaImage: _ropaImage!,
+                    ),
+                  ),
+
+                // 🔘 Botón inferior para cambiar de prenda
                 Positioned(
                   bottom: 40,
                   left: 0,
@@ -268,7 +332,6 @@ class RopaPainter extends CustomPainter {
 
     final rect = Rect.fromLTRB(left, top, right, bottom);
 
-    // 👕 Dibuja la imagen PNG de la prenda
     paintImage(
       canvas: canvas,
       rect: rect,
@@ -276,6 +339,97 @@ class RopaPainter extends CustomPainter {
       fit: BoxFit.fill,
       opacity: 0.9,
     );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// 🎯 Pinta puntos + líneas (esqueleto)
+class PoseSkeletonPainter extends CustomPainter {
+  final List<Pose> poses;
+  final Size imageSize;
+  final Size widgetSize;
+  final bool mirror;
+
+  PoseSkeletonPainter({
+    required this.poses,
+    required this.imageSize,
+    required this.widgetSize,
+    required this.mirror,
+  });
+
+  Offset _mapPoint(double x, double y) {
+    final scaleX = widgetSize.width / imageSize.width;
+    final scaleY = widgetSize.height / imageSize.height;
+
+    double mappedX = x * scaleX;
+    if (mirror) mappedX = widgetSize.width - mappedX;
+    double mappedY = y * scaleY;
+    return Offset(mappedX, mappedY);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pointPaint = Paint()
+      ..color = Colors.blueAccent
+      ..style = PaintingStyle.fill;
+
+    final linePaint = Paint()
+      ..color = Colors.lightBlueAccent
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
+
+    for (final pose in poses) {
+      // 1) Dibuja TODOS los puntos
+      for (final landmark in pose.landmarks.values) {
+        final p = _mapPoint(landmark.x, landmark.y);
+        canvas.drawCircle(p, 6, pointPaint);
+      }
+
+      // 2) Conexiones para simular esqueleto
+      Offset? getPoint(PoseLandmarkType type) {
+        final lm = pose.landmarks[type];
+        if (lm == null) return null;
+        return _mapPoint(lm.x, lm.y);
+      }
+
+      final pairs = <List<PoseLandmarkType>>[
+        // torso
+        [PoseLandmarkType.leftShoulder, PoseLandmarkType.rightShoulder],
+        [PoseLandmarkType.leftHip, PoseLandmarkType.rightHip],
+        [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftHip],
+        [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightHip],
+
+        // brazo derecho
+        [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightElbow],
+        [PoseLandmarkType.rightElbow, PoseLandmarkType.rightWrist],
+
+        // brazo izquierdo
+        [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftElbow],
+        [PoseLandmarkType.leftElbow, PoseLandmarkType.leftWrist],
+
+        // pierna derecha
+        [PoseLandmarkType.rightHip, PoseLandmarkType.rightKnee],
+        [PoseLandmarkType.rightKnee, PoseLandmarkType.rightAnkle],
+
+        // pierna izquierda
+        [PoseLandmarkType.leftHip, PoseLandmarkType.leftKnee],
+        [PoseLandmarkType.leftKnee, PoseLandmarkType.leftAnkle],
+
+        // cuello / cabeza aproximados
+        [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftEar],
+        [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightEar],
+      ];
+
+      for (final pair in pairs) {
+        final p1 = getPoint(pair[0]);
+        final p2 = getPoint(pair[1]);
+        if (p1 != null && p2 != null) {
+          canvas.drawLine(p1, p2, linePaint);
+        }
+      }
+    }
   }
 
   @override
