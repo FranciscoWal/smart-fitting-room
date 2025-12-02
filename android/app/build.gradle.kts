@@ -20,20 +20,19 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Cambia este ID si lo quieres publicar
         applicationId = "com.example.smart_fitting_room"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Firmando con debug para desarrollo
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -41,4 +40,21 @@ android {
 
 flutter {
     source = "../.."
+}
+
+/*
+ ============================================================
+ ▌ FIX PARA ERROR:
+ ▌   Dependency "androidx.activity:activity-ktx:1.11.0"
+ ▌   requires Android Gradle Plugin 8.9.1 but project uses 8.7.3
+ ▌
+ ▌ Solución:
+ ▌  Forzar una versión compatible (1.9.0) para evitar el fallo.
+ ============================================================
+*/
+configurations.all {
+    resolutionStrategy {
+        force("androidx.activity:activity:1.9.0")
+        force("androidx.activity:activity-ktx:1.9.0")
+    }
 }

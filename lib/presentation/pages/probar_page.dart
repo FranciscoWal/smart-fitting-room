@@ -215,11 +215,27 @@ class _ProbarPageState extends State<ProbarPage> {
     final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: const Color(0xFF020617),
       body: _isCameraInitialized
           ? Stack(
               fit: StackFit.expand,
               children: [
-                // 📸 Cámara SIN efecto espejo
+                // Fondo degradado a juego con el resto de la app
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFF020617),
+                        Color(0xFF020617),
+                        Color(0xFF0f172a),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+
+                // 📸 Cámara a pantalla completa
                 CameraPreview(_cameraController!),
 
                 // 🧍‍♂️ Esqueleto (puntos + líneas)
@@ -250,34 +266,143 @@ class _ProbarPageState extends State<ProbarPage> {
                     ),
                   ),
 
-                // 🔘 Botón inferior para cambiar de prenda
-                Positioned(
-                  bottom: 40,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: ElevatedButton(
-                      onPressed: _changeRopa,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 12,
+                // 🖼 Marco / visor estético sobre la cámara
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(24, 90, 24, 90),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(26),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.45),
+                          width: 1.4,
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.6),
+                            blurRadius: 18,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 🔹 Header interno con icono en círculo + título
+                Positioned(
+                  top: 24,
+                  left: 20,
+                  right: 20,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF38bdf8), Color(0xFF6366f1)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.vrpano_rounded,
+                          color: Colors.white,
+                          size: 22,
                         ),
                       ),
-                      child: const Text(
-                        'Probar prendas',
-                        style: TextStyle(fontSize: 18, color: Colors.white),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Probar en AR',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                            ),
+                          ),
+                          Text(
+                            'Ajusta tu postura y prueba distintas prendas.',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 🔘 Botón flotante sutil para cambiar prenda (misma funcionalidad)
+                Positioned(
+                  bottom: 32,
+                  right: 24,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: Material(
+                        color: Colors.black.withOpacity(0.55),
+                        child: InkWell(
+                          onTap: _changeRopa,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.autorenew_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Cambiar prenda',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ],
             )
-          : const Center(child: CircularProgressIndicator()),
+          : Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF020617),
+                    Color(0xFF020617),
+                    Color(0xFF0f172a),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                ),
+              ),
+            ),
     );
   }
 }

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:smart_fitting_room/config/supabase_config.dart';
 import 'package:smart_fitting_room/presentation/pages/login.dart';
 
 Future<void> main() async {
-  // Asegura la inicialización antes de usar Supabase
   WidgetsFlutterBinding.ensureInitialized();
 
   // Inicializa Supabase
@@ -21,8 +21,17 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Smart Fitting Room',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Roboto'),
-      home: const LoginPage(), // Página principal (Login)
+
+      // 🎨 Tema global con CONCERT ONE
+      theme: ThemeData(
+        brightness: Brightness.dark,   // tu app usa fondo oscuro
+        textTheme: GoogleFonts.concertOneTextTheme(),
+        primaryTextTheme: GoogleFonts.concertOneTextTheme(),
+        scaffoldBackgroundColor: Colors.black,
+        useMaterial3: false,
+      ),
+
+      home: const LoginPage(),
     );
   }
 }
